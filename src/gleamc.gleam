@@ -3,36 +3,37 @@ import clip
 import gleam/io
 import gleam/list
 import gleam/result
-import gleamc/cli
+import gleamc/cli.{type ParsedCLI}
 import gleamc/error.{type GenericError}
 import gleamc/lexer
 import gleamc/utils
 import spinner
 
-pub fn run(_cli: cli.CLI) -> Result(Nil, GenericError) {
-  let indicator = spinner.new("Compiling...") |> spinner.start
-  use <- utils.defer(fn() { indicator |> spinner.stop })
+pub fn run(parsed_cli: ParsedCLI) -> Result(Nil, GenericError) {
+  let spinner_ = spinner.new("Compiling...") |> spinner.start
+  use <- utils.defer(fn() { spinner_ |> spinner.stop })
 
-  indicator |> spinner.set_text("Phase: lexer")
+  spinner_ |> spinner.set_text("Phase: lexer")
   list.range(1, 10_000_000)
-  use _tokens <- result.try(lexer.run())
+  use tokens <- result.try(lexer.run(parsed_cli.file))
+  io.debug(tokens)
 
   list.range(1, 10_000_000)
-  indicator |> spinner.set_text("Phase: parser")
+  spinner_ |> spinner.set_text("Phase: parser")
 
   io.println("Done")
   Ok(Nil)
 }
 
 pub fn main() -> Nil {
-  let result =
+  let parsing_result =
     cli.new()
     |> clip.run(argv.load().arguments)
 
-  case result {
+  case parsing_result {
     Error(e) -> io.println_error(e)
-    Ok(cli) -> {
-      case run(cli) {
+    Ok(parsed_cli) -> {
+      case run(parsed_cli) {
         Error(e) -> e |> error.report
         Ok(_) -> Nil
       }
