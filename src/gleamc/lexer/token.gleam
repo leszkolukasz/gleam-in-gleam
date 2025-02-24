@@ -2,9 +2,9 @@
 pub type Token {
   Name(value: String)
   UpName(value: String)
-  IntLit(raw_value: String, int_value: Int)
-  FloatLit(value: String)
-  StringLit(value: String)
+  Int(raw_value: String, int_value: Int)
+  Float(value: String)
+  String(value: String)
   // unused: CommentDoc(value: String)
   // Groupings
   LeftParen

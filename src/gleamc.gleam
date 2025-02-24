@@ -20,12 +20,14 @@ pub fn run(parsed_cli: ParsedCLI) -> Result(Nil, GenericError) {
 
   list.range(1, 10_000_000)
   spinner_ |> spinner.set_text("Phase: parser")
-
   io.println("Done")
   Ok(Nil)
 }
 
 pub fn main() -> Nil {
+  let t = #(0, 1)
+  io.debug(t.0 - 1)
+
   let parsing_result =
     cli.new()
     |> clip.run(argv.load().arguments)
