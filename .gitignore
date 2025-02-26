@@ -2,3 +2,12 @@
 *.ez
 /build
 erl_crash.dump
+
+__pycache__/
+*.pyc
+
+.antlr/
+*.interp
+*.tokens
+*.class
+/grammar/*.java
