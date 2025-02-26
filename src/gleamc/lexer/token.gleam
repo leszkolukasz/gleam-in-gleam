@@ -1,3 +1,5 @@
+import gleam/option.{type Option, None, Some}
+
 /// Borrowed from [official repo](https://github.com/gleam-lang/gleam/blob/main/compiler-core/src/parse/token.rs)
 pub type Token {
   Name(value: String)
@@ -53,11 +55,11 @@ pub type Token {
   LArrow
   DotDot
   At
-  EndOfFile
+  // unused: EndOfFile
   // Extra
   // unused: CommentNormal
   // unused: CommentModule
-  NewLine
+  // unused: NewLine
   // Keywords:
   As
   Assert
@@ -81,4 +83,32 @@ pub type Token {
   Todo
   Type
   Use
+}
+
+pub fn to_keyword(lexeme: String) -> Option(Token) {
+  case lexeme {
+    "as" -> Some(As)
+    "assert" -> Some(Assert)
+    "auto" -> Some(Auto)
+    "case" -> Some(Case)
+    "const" -> Some(Const)
+    "delegate" -> Some(Delegate)
+    "derive" -> Some(Derive)
+    "echo" -> Some(Echo)
+    "else" -> Some(Else)
+    "fn" -> Some(Fn)
+    "if" -> Some(If)
+    "implement" -> Some(Implement)
+    "import" -> Some(Import)
+    "let" -> Some(Let)
+    "macro" -> Some(Macro)
+    "opaque" -> Some(Opaque)
+    "panic" -> Some(Panic)
+    "pub" -> Some(Pub)
+    "test" -> Some(Test)
+    "todo" -> Some(Todo)
+    "type" -> Some(Type)
+    "use" -> Some(Use)
+    _ -> None
+  }
 }
