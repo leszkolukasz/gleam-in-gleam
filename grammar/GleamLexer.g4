@@ -46,7 +46,7 @@ AmperAmper: '&&';
 LtLt: '<<';
 GtGt: '>>';
 Pipe: '|>';
-Dot: '.';
+Dot: '.' -> mode(AFTER_DOT);
 RArrow: '->';
 LArrow: '<-';
 DotDot: '..';
@@ -81,7 +81,7 @@ Type: 'type';
 Use: 'use';
 
 // Names
-Name: [a-zA-Z_][a-zA-Z_0-9]* { pushMode(AFTER_NAME); };
+Name: [a-zA-Z_][a-zA-Z_0-9]*;
 UpName: [A-Z][a-zA-Z_0-9]*;
 
 // Literals
@@ -90,14 +90,15 @@ Float: Int '.' Int?;
 String: '"' (~["] | '\\"')* '"';
 
 // Skip whitespace and comments
-WS: [ \t\r]+ -> skip;
-COMMENT: '//' ~[\n]* -> skip;
-
-mode AFTER_NAME;
-DotAfterName: '.' -> type(Dot), pushMode(AFTER_DOT);
-ModeEnd: [^.] -> popMode;
+Whitespace: [ \t\r]+ -> skip;
+Comment: '//' ~[\n]* -> skip;
 
 mode AFTER_DOT;
-IntAfterDot: [0-9]+ -> type(Int), popMode;
-AnotherDot: '.' -> type(Dot), popMode;
-ModeExit: [^0-9.] -> popMode;
+IntAfterDot: Int -> type(Int);
+AnotherDot: '.' -> type(Dot);
+ModeExit: ~[0-9.] -> mode(DEFAULT_MODE), match; 
+//                                          ^
+//                                          |
+// We dont want this to be a token `ModeExit` but whatever this will be matched to in DEFAULT_MODE.
+// ANTLR doesn't seem to have this functionality. One could copy all the rules from DEFAULT_MODE here,
+// but that would be too much duplication so I will assume that `match` does exactly what I want.
