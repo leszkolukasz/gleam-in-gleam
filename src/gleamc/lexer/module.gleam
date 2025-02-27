@@ -1,12 +1,11 @@
 import act.{type Action}
 import act/state
 import gleam/bool
-import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import gleamc/lexer/error.{type LexerError}
-import gleamc/lexer/predicates
+import gleamc/lexer/predicates.{type ContinuationPredicate}
 import gleamc/lexer/token.{type Token}
 import gleamc/utils
 
@@ -180,12 +179,20 @@ fn lex_chunk() -> LexT(List(Token)) {
 }
 
 fn lex_upname() -> LexT(List(Token)) {
-  use lexeme <- act.do(take_while("", predicates.is_name_continuation))
+  use lexeme <- act.try(
+    take_while(predicates.build_predicate_record(
+      predicates.is_name_continuation,
+    )),
+  )
   act.return(Ok([token.UpName(lexeme)]))
 }
 
 fn lex_name() -> LexT(List(Token)) {
-  use lexeme <- act.do(take_while("", predicates.is_name_continuation))
+  use lexeme <- act.try(
+    take_while(predicates.build_predicate_record(
+      predicates.is_name_continuation,
+    )),
+  )
   case token.to_keyword(lexeme) {
     Some(tok) -> act.return(Ok([tok]))
     None -> act.return(Ok([token.Name(lexeme)]))
@@ -193,15 +200,18 @@ fn lex_name() -> LexT(List(Token)) {
 }
 
 fn lex_number() -> LexT(List(Token)) {
-  use lexeme <- act.do(take_while("", predicates.is_number_start))
+  use lexeme <- act.try(
+    take_while(predicates.build_predicate_record(
+      predicates.is_name_continuation,
+    )),
+  )
   // TODO: handle floats
   act.return(Ok([token.Name(lexeme)]))
 }
 
-// TODO: add take_while_result version to handle unexpected EOF
 fn lex_string() -> LexT(List(Token)) {
   use _ <- act.do(advance(1))
-  use lexeme <- act.do(take_while("", predicates.is_string_continuation))
+  use lexeme <- act.try(take_while(predicates.string_predicate))
 
   use state_: State <- state.get()
   let assert Ok(#("\"", _)) = string.pop_grapheme(state_.source)
@@ -211,29 +221,38 @@ fn lex_string() -> LexT(List(Token)) {
 }
 
 fn lex_comment() -> LexT(List(Token)) {
-  todo
+  use _ <- act.try(
+    take_while(predicates.build_predicate_record(fn(c) { c != "\n" })),
+  )
+  act.return(Ok([]))
 }
 
 fn maybe_lex_dot_access() -> LexT(List(Token)) {
   act.return(Ok([]))
 }
 
-fn take_while(
+fn take_while(predicate: ContinuationPredicate(acc)) -> LexT(String) {
+  do_take_while("", predicate.is_continuation, predicate.default_acc)
+}
+
+fn do_take_while(
   lexeme: String,
-  predicate: fn(String) -> Bool,
-) -> Action(String, State) {
+  predicate_fun: fn(String, acc) -> Result(#(Bool, acc), LexerError),
+  last_acc: acc,
+) -> LexT(String) {
   use state_: State <- state.get()
 
-  case state_.source |> predicate {
-    True -> {
+  case predicate_fun(state_.source, last_acc) {
+    Ok(#(True, new_acc)) -> {
       case state_.source |> string.pop_grapheme() {
         Ok(#(c, _)) -> {
           use _ <- act.do(advance(1))
-          take_while(lexeme <> c, predicate)
+          do_take_while(lexeme <> c, predicate_fun, new_acc)
         }
         Error(_) -> panic
       }
     }
-    False -> act.return(lexeme)
+    Ok(#(False, _)) -> act.return(Ok(lexeme))
+    Error(err) -> act.return(Error(err))
   }
 }
