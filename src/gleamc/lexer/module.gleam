@@ -1,6 +1,8 @@
 import act.{type Action}
 import act/state
 import gleam/bool
+import gleam/int
+import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
@@ -53,17 +55,17 @@ fn do_lex_module(tokens: List(Token)) -> LexT(List(Token)) {
 fn lex_chunk() -> LexT(List(Token)) {
   use state_: State <- state.get()
 
-  use <- bool.lazy_guard(
-    state_.source |> predicates.is_upname_start,
-    lex_upname,
-  )
+  use <- bool.lazy_guard(state_.source |> predicates.is_upname_start, fn() {
+    wrap_in_list(lex_upname)
+  })
 
-  use <- bool.lazy_guard(state_.source |> predicates.is_name_start, lex_name)
+  use <- bool.lazy_guard(state_.source |> predicates.is_name_start, fn() {
+    wrap_in_list(lex_name)
+  })
 
-  use <- bool.lazy_guard(
-    state_.source |> predicates.is_number_start,
-    lex_number,
-  )
+  use <- bool.lazy_guard(state_.source |> predicates.is_number_start, fn() {
+    wrap_in_list(fn() { lex_number(False) })
+  })
 
   use <- bool.lazy_guard(
     state_.source |> predicates.is_string_start,
@@ -164,7 +166,9 @@ fn lex_chunk() -> LexT(List(Token)) {
         "." <> _ -> consume_and_emit(2, [token.DotDot])
         _ -> {
           use _ <- act.do(advance(1))
-          use dot_access_tokens <- act.try(maybe_lex_dot_access())
+
+          // We need make sure that in expression like `a.1.1`, `1.1 is not parsed as float.
+          use dot_access_tokens <- act.try(maybe_lex_numeric_dot_access())
           act.return(Ok([token.Dot, ..dot_access_tokens]))
         }
       }
@@ -174,39 +178,55 @@ fn lex_chunk() -> LexT(List(Token)) {
       use _ <- act.do(advance(1))
       act.return(Ok([]))
     }
-    _ -> panic
+    _ -> {
+      io.debug(state_.source)
+      panic
+    }
   }
 }
 
-fn lex_upname() -> LexT(List(Token)) {
+fn lex_upname() -> LexT(Token) {
   use lexeme <- act.try(
     take_while(predicates.build_predicate_record(
       predicates.is_name_continuation,
     )),
   )
-  act.return(Ok([token.UpName(lexeme)]))
+  act.return(Ok(token.UpName(lexeme)))
 }
 
-fn lex_name() -> LexT(List(Token)) {
+fn lex_name() -> LexT(Token) {
   use lexeme <- act.try(
     take_while(predicates.build_predicate_record(
       predicates.is_name_continuation,
     )),
   )
   case token.to_keyword(lexeme) {
-    Some(tok) -> act.return(Ok([tok]))
-    None -> act.return(Ok([token.Name(lexeme)]))
+    Some(tok) -> act.return(Ok(tok))
+    None -> act.return(Ok(token.Name(lexeme)))
   }
 }
 
-fn lex_number() -> LexT(List(Token)) {
+fn lex_number(only_int: Bool) -> LexT(Token) {
   use lexeme <- act.try(
-    take_while(predicates.build_predicate_record(
-      predicates.is_name_continuation,
-    )),
+    take_while(case only_int {
+      True -> predicates.int_predicate
+      False -> predicates.number_predicate
+    }),
   )
-  // TODO: handle floats
-  act.return(Ok([token.Name(lexeme)]))
+
+  case string.contains(lexeme, ".") {
+    True -> {
+      let assert False = only_int
+      act.return(Ok(token.Float(lexeme)))
+    }
+    False -> {
+      let num = case int.parse(lexeme) {
+        Ok(n) -> n
+        Error(_) -> panic as "Could not parse int"
+      }
+      act.return(Ok(token.Int(lexeme, num)))
+    }
+  }
 }
 
 fn lex_string() -> LexT(List(Token)) {
@@ -227,8 +247,26 @@ fn lex_comment() -> LexT(List(Token)) {
   act.return(Ok([]))
 }
 
-fn maybe_lex_dot_access() -> LexT(List(Token)) {
-  act.return(Ok([]))
+fn maybe_lex_numeric_dot_access() -> LexT(List(Token)) {
+  do_maybe_lex_numeric_dot_access([])
+}
+
+fn do_maybe_lex_numeric_dot_access(tokens: List(Token)) -> LexT(List(Token)) {
+  use state_: State <- state.get()
+  case predicates.is_number_start(state_.source) {
+    True -> {
+      use number_token <- act.try(lex_number(True))
+      use state_: State <- state.get()
+      case state_.source {
+        "." <> _ -> {
+          use _ <- act.do(advance(1))
+          do_maybe_lex_numeric_dot_access([token.Dot, number_token, ..tokens])
+        }
+        _ -> act.return(Ok([number_token, ..tokens]))
+      }
+    }
+    False -> act.return(Ok(tokens))
+  }
 }
 
 fn take_while(predicate: ContinuationPredicate(acc)) -> LexT(String) {
@@ -247,12 +285,17 @@ fn do_take_while(
       case state_.source |> string.pop_grapheme() {
         Ok(#(c, _)) -> {
           use _ <- act.do(advance(1))
-          do_take_while(lexeme <> c, predicate_fun, new_acc)
+          do_take_while(c <> lexeme, predicate_fun, new_acc)
         }
         Error(_) -> panic
       }
     }
-    Ok(#(False, _)) -> act.return(Ok(lexeme))
+    Ok(#(False, _)) -> act.return(Ok(lexeme |> string.reverse))
     Error(err) -> act.return(Error(err))
   }
+}
+
+fn wrap_in_list(fun: fn() -> LexT(a)) -> LexT(List(a)) {
+  use result <- act.try(fun())
+  act.return(Ok([result]))
 }

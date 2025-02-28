@@ -45,9 +45,35 @@ pub fn is_name_continuation(source: String) -> Bool {
 
 pub fn is_number_start(source: String) -> Bool {
   case source |> string.pop_grapheme() {
-    Ok(#(c, _rest)) -> c |> string.contains(digits)
+    Ok(#(c, _rest)) -> digits |> string.contains(c)
     Error(_) -> False
   }
+}
+
+pub fn is_number_continuation(
+  only_int: Bool,
+  source: String,
+  was_dot: Bool,
+) -> Result(#(Bool, Bool), LexerError) {
+  case source |> string.pop_grapheme() {
+    Ok(#(".", _rest)) if !was_dot -> Ok(#(!only_int, True))
+    Ok(#(c, _rest)) -> Ok(#(digits |> string.contains(c), was_dot))
+    Error(_) -> Ok(#(False, was_dot))
+  }
+}
+
+pub fn is_int_continuation(
+  source: String,
+  was_dot: Bool,
+) -> Result(#(Bool, Bool), LexerError) {
+  is_number_continuation(True, source, was_dot)
+}
+
+pub fn is_float_continuation(
+  source: String,
+  was_dot: Bool,
+) -> Result(#(Bool, Bool), LexerError) {
+  is_number_continuation(False, source, was_dot)
 }
 
 pub fn is_string_start(source: String) -> Bool {
@@ -92,3 +118,7 @@ pub const string_predicate = ContinuationPredicate(
   is_string_continuation,
   False,
 )
+
+pub const int_predicate = ContinuationPredicate(is_int_continuation, False)
+
+pub const number_predicate = ContinuationPredicate(is_float_continuation, False)
